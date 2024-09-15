@@ -1,0 +1,9 @@
+[package]
+name = "harita"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+noise = "0.7"
+image = "0.24"
+rand = "0.8"
