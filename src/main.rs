@@ -104,7 +104,7 @@ fn color(tile: Tile, biome: Biome, height: f64, precipitation: f64) -> Rgb<u8> {
             //Biome::Savanna => Rgb([161u8, 144u8, 36u8]),
             Biome::Rainforest => Rgb([0u8, 102u8, 51u8]),
             Biome::Steppe => Rgb([255u8, 255u8, 102u8]),
-            Biome::Ice => Rgb([204u8, 229, 255u8]),
+            Biome::Ice => Rgb([200u8, 233u8, 233u8]),
             _ => Rgb([34u8, 139u8, 34u8]),
         },
         Tile::Snow => match biome {
@@ -169,14 +169,30 @@ impl Map {
                 let nx = x as f64 * SCALE;
                 let ny = y as f64 * SCALE;
 
-                //add noise at different freqs to get more realistic terrain
+               // Combine multiple layers of noise (octaves) to create more complex terrain
                 let mut height_value = 0.0;
-                for i in 0..25 {
-                    height_value += perlin_heightmap.get([nx * 2.0_f64.powi(i), ny * 2.0_f64.powi(i)]) / 2.0_f64.powi(i);
+                let mut frequency = 1.0;
+                let mut amplitude = 1.0;
+                let mut max_value = 0.0; // Used for normalization
+
+                for _ in 0..6 { // Number of octaves
+                    height_value += perlin_heightmap.get([nx * frequency, ny * frequency]) * amplitude;
+                    max_value += amplitude;
+                    amplitude *= 0.75;
+                    frequency *= 2.0;
                 }
 
+                height_value /= max_value;
+
+                // Apply a radial gradient to create continent-like shapes
+                let dx = (x as f64 / WIDTH as f64) - 0.5;
+                let dy = (y as f64 / HEIGHT as f64) - 0.5;
+                let distance = (dx * dx + dy * dy).sqrt() * 2.0;
+                height_value = (height_value - ( 0.35 * distance)).max(-1.0).min(1.0);
+
+
                 let mut precipitation_value = 0.0;
-                for i in 0..25 {
+                for i in 0..5 {
                     precipitation_value += perlin_precipitation_map.get([nx * 2.0_f64.powi(i), ny * 2.0_f64.powi(i)]) / 2.0_f64.powi(i);
                 }
 
@@ -191,7 +207,7 @@ impl Map {
 
                 let equivalent_elevation = equivalent_elevation(calculate_latitude(y as f64), height_value);
 
-                biomes[y][x] = Self::biome(equivalent_elevation, precipitation_value, calculate_latitude(y as f64));
+                biomes[y][x] = Self::biome(height_value, equivalent_elevation, precipitation_value, calculate_latitude(y as f64));
 
 
             }
@@ -200,10 +216,10 @@ impl Map {
         Map { tiles , biomes , heightmap , precipitation_map }
     }
 
-    fn biome(elevation: f64, precipitation: f64, latitude : f64) -> Biome {
+    fn biome(elevation: f64, equivalent_elevation: f64, precipitation: f64, latitude : f64) -> Biome {
         let distance_to_equator = distance_to_equator(latitude);
 
-        if distance_to_equator > 0.95 {
+        if distance_to_equator > 0.95 || equivalent_elevation > 1.05 {
             return Biome::Ice;
         }
         else if elevation > 0.85 {
@@ -215,7 +231,7 @@ impl Map {
         else if elevation > 0.45 {
             return Biome::Hill;
         }
-        else if elevation > -0.2 {
+        else if equivalent_elevation > 0.0 {
             if precipitation > 0.75 && (distance_to_equator > 0.1 || distance_to_equator < -0.1) {
                 return Biome::Jungle;
             }
